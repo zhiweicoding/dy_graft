@@ -1,4 +1,4 @@
-import json
+from pathlib import Path
 
 from f2.apps.douyin.crawler import DouyinCrawler
 from f2.apps.douyin.dl import DouyinDownloader
@@ -6,14 +6,12 @@ from f2.apps.douyin.model import PostDetail
 from f2.apps.douyin.utils import (
     AwemeIdFetcher,
 )
-from fastapi import APIRouter, Request, Depends
-from sqlalchemy.orm import Session
+from f2.i18n.translator import _
+from f2.log.logger import logger
+from fastapi import APIRouter, Request
 
 from app.entity.base_response import BaseResponse
 from app.entity.filter_model import PostDetailFilter
-from f2.log.logger import logger
-from f2.i18n.translator import _
-from pathlib import Path
 
 router = APIRouter()
 
