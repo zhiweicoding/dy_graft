@@ -12,8 +12,15 @@ from fastapi import APIRouter, Request
 
 from app.entity.base_response import BaseResponse
 from app.entity.filter_model import PostDetailFilter
+import tempfile
+import os
+import json
+from app.storage import storage_factory
+from datetime import datetime
 
 router = APIRouter()
+
+cdn_url = os.environ['CDN_URL']
 
 
 @router.post("/query/info", response_model=BaseResponse)
@@ -29,22 +36,47 @@ async def receive_list(request: Request):
     async with DouyinCrawler(data) as crawler:
         params = PostDetail(aweme_id=aweme_id)
         response = await crawler.fetch_post_detail(params)
-        video = PostDetailFilter(response)
+        video: PostDetailFilter = PostDetailFilter(response)
 
-    logger.info(_("单个作品数据：{0}").format(video._to_dict()))
+    video_dict: dict = video._to_dict()
+
+    logger.info(_("单个作品数据：{0}").format(video_dict))
 
     save_path: Path = create_user_folder(data, video.sec_user_id)
     logger.info(_("保存路径：{0}").format(save_path))
+
     await DouyinDownloader(data).create_download_tasks(
-        data, video._to_dict(), save_path
+        data, video_dict, save_path
     )
 
-    return BaseResponse(code=200, message="success", data=video._to_dict()).json()
+    video_dict['upload_cover_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_cover.jpeg')
+    video_dict['upload_video_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_video.mp4')
+
+    return BaseResponse(code=200, message="success", data=video_dict).json()
+
+
+def upload_file_to_storage(real_path_str: str, data: dict, nickname: str, file_suffix: str):
+    storage_type = os.environ.get('STORAGE_TYPE', 'default')
+    storage = storage_factory.get_storage(storage_type)
+
+    file_name = data.get("naming", "SET NAME") + file_suffix
+    file_path = real_path_str + '/' + file_name
+    logger.info(f"file_path: {file_path} file_name : {file_name}")
+    now = datetime.now()  # 获取当前时间
+    date_str = now.strftime("%Y%m%d")  # 将时间格式化为 YYYYMMDD 格式
+    upload_resp = storage.upload(file_path, f'/dy/{date_str}/{nickname}/' + file_name,
+                                 meta_data=dict(cell_id='dy_' + file_suffix.split('.')[0]))
+
+    logger.info(f"File upload response: {json.dumps(upload_resp)}")
+    os.remove(file_path)
+    return cdn_url + file_name
 
 
 def create_user_folder(kwargs: dict, nickname) -> Path:
     # 创建基础路径
-    base_path = Path(kwargs.get("path", "Download"))
+    temp_dir = tempfile.gettempdir()
+    # base_path = Path(kwargs.get("path", "Download"))
+    base_path = Path(temp_dir)
 
     # 添加下载模式和用户名
     user_path = (
