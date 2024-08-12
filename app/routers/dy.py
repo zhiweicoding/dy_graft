@@ -64,12 +64,12 @@ def upload_file_to_storage(real_path_str: str, data: dict, nickname: str, file_s
     logger.info(f"file_path: {file_path} file_name : {file_name}")
     now = datetime.now()  # 获取当前时间
     date_str = now.strftime("%Y%m%d")  # 将时间格式化为 YYYYMMDD 格式
-    upload_resp = storage.upload(file_path, f'/dy/{date_str}/{nickname}/' + file_name,
+    upload_resp = storage.upload(file_path, f'/dy/{date_str}/{nickname}/{file_name}',
                                  meta_data=dict(cell_id='dy_' + file_suffix.split('.')[0]))
 
     logger.info(f"File upload response: {json.dumps(upload_resp)}")
     os.remove(file_path)
-    return cdn_url + file_name
+    return f'{cdn_url}/dy/{date_str}/{nickname}/{file_name}'
 
 
 def create_user_folder(kwargs: dict, nickname) -> Path:
