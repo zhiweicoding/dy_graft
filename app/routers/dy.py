@@ -28,6 +28,10 @@ async def receive_list(request: Request):
     # Parse the incoming JSON data
     data = await request.json()
     data['proxies'] = {"http://": None, "https://": None}
+    data['headers'] = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0",
+        "Referer": "https://www.douyin.com/"
+    }
     url = data.get("url")
     # You can process the data here
     print(f'data:{data}')
@@ -64,10 +68,8 @@ def upload_file_to_storage(real_path_str: str, data: dict, nickname: str, file_s
     logger.info(f"file_path: {file_path} file_name : {file_name}")
     now = datetime.now()  # 获取当前时间
     date_str = now.strftime("%Y%m%d")  # 将时间格式化为 YYYYMMDD 格式
-    upload_resp = storage.upload(file_path, f'/dy/{date_str}/{nickname}/{file_name}',
-                                 meta_data=dict(cell_id='dy_' + file_suffix.split('.')[0]))
-
-    logger.info(f"File upload response: {json.dumps(upload_resp)}")
+    storage.upload(file_path, f'/dy/{date_str}/{nickname}/{file_name}',
+                   meta_data=dict(cell_id='dy_' + file_suffix.split('.')[0]))
     os.remove(file_path)
     return f'{cdn_url}/dy/{date_str}/{nickname}/{file_name}'
 

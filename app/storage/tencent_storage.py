@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+import json
 
 from qcloud_cos import CosConfig
 from qcloud_cos import CosS3Client
@@ -36,6 +37,7 @@ class TencentStorage(self_storage.Storage):
                 LocalFilePath=file_path,
                 Metadata=meta_data
             )
+            print(f"File upload response: {json.dumps(response)}")
             return response
         except CosServiceError as e:
             print(e.get_error_code())
