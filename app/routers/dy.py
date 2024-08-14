@@ -60,8 +60,6 @@ async def receive_list(request: Request):
         video_dict['upload_cover_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_cover.jpeg')
         video_dict['upload_video_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_video.mp4')
 
-    video_dict['aweme_type'] = aweme_type
-
     return BaseResponse(code=200, message="success", data=video_dict).json()
 
 
