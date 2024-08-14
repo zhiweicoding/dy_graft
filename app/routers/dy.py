@@ -40,10 +40,11 @@ async def receive_list(request: Request):
     async with DouyinCrawler(data) as crawler:
         params = PostDetail(aweme_id=aweme_id)
         response = await crawler.fetch_post_detail(params)
+        aweme_type: int = response['aweme_type']
         video: PostDetailFilter = PostDetailFilter(response)
 
     video_dict: dict = video._to_dict()
-
+    print(f'response: {response}')
     logger.info(_("单个作品数据：{0}").format(video_dict))
 
     save_path: Path = create_user_folder(data, video.sec_user_id)
@@ -53,8 +54,13 @@ async def receive_list(request: Request):
         data, video_dict, save_path
     )
 
-    video_dict['upload_cover_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_cover.jpeg')
-    video_dict['upload_video_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_video.mp4')
+    if aweme_type == 68:
+        video_dict['upload_img_urls'] = upload_img_to_storage(str(save_path), video.sec_user_id)
+    else:
+        video_dict['upload_cover_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_cover.jpeg')
+        video_dict['upload_video_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_video.mp4')
+
+    video_dict['aweme_type'] = aweme_type
 
     return BaseResponse(code=200, message="success", data=video_dict).json()
 
@@ -72,6 +78,27 @@ def upload_file_to_storage(real_path_str: str, data: dict, nickname: str, file_s
                    meta_data=dict(cell_id='dy_' + file_suffix.split('.')[0]))
     os.remove(file_path)
     return f'{cdn_url}/dy/{date_str}/{nickname}/{file_name}'
+
+
+def upload_img_to_storage(real_path_str: str, nickname: str) -> list:
+    storage_type = os.environ.get('STORAGE_TYPE', 'default')
+    storage = storage_factory.get_storage(storage_type)
+    now = datetime.now()  # 获取当前时间
+    date_str = now.strftime("%Y%m%d")  # 将时间格式化为 YYYYMMDD 格式
+    return_array = []
+    # 获取磁盘路径下的所有文件
+    for file in os.listdir(real_path_str):
+        if not file.startswith('.'):  # 忽略隐藏文件
+            file_path = os.path.join(real_path_str, file)
+            try:
+                storage.upload(file_path, f'/dy/{date_str}/{nickname}/{file}',
+                               meta_data=dict(cell_id='dy_' + os.path.splitext(file)[0]))
+                os.remove(file_path)
+                return_array.append(f'{cdn_url}/dy/{date_str}/{nickname}/{file}')
+            except Exception as e:
+                logger.error(f"Failed to upload or delete file {file_path}: {e}")
+                continue
+    return return_array
 
 
 def create_user_folder(kwargs: dict, nickname) -> Path:
