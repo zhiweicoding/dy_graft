@@ -40,7 +40,10 @@ async def receive_list(request: Request):
     async with DouyinCrawler(data) as crawler:
         params = PostDetail(aweme_id=aweme_id)
         response = await crawler.fetch_post_detail(params)
-        aweme_type: int = response['aweme_type']
+        if response['status_code'] != 0:
+            aweme_type: int = -1
+        else:
+            aweme_type: int = response['aweme_detail']['aweme_type']
         video: PostDetailFilter = PostDetailFilter(response)
 
     video_dict: dict = video._to_dict()
