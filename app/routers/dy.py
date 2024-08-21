@@ -73,7 +73,7 @@ async def query_info(request: Request, background_tasks: BackgroundTasks, db: Se
         record_id=str(uuid.uuid4()),
         input_url_params='',
         input_args=json.dumps(data),
-        type='dy',
+        type='DY',
         mix_type=str(aweme_type),
         output_body=json.dumps(video_dict),
         visitor_id=data['vid'] if data['vid'] else 'anonymous',
