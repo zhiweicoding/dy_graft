@@ -76,7 +76,7 @@ async def query_info(request: Request, background_tasks: BackgroundTasks, db: Se
         type='dy',
         mix_type=str(aweme_type),
         output_body=json.dumps(video_dict),
-        visitor_id='anonymous',
+        visitor_id=data['vid'] if data['vid'] else 'anonymous',
         creator='dy_python_service',
         updater='dy_python_service',
         is_delete=False,
