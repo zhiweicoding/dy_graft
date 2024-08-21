@@ -8,6 +8,7 @@ cos-python-sdk-v5
 python-dotenv~=1.0.1
 pydantic~=2.6.4
 requests~=2.31.0
-pymysql~=1.1.0
+psycopg2-binary
 f2==0.0.1.6
 minio
+sqlalchemy~=2.0.30

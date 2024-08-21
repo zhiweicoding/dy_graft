@@ -1,4 +1,8 @@
 from pathlib import Path
+import uuid
+import tempfile
+import os
+import json
 
 from f2.apps.douyin.crawler import DouyinCrawler
 from f2.apps.douyin.dl import DouyinDownloader
@@ -8,23 +12,37 @@ from f2.apps.douyin.utils import (
 )
 from f2.i18n.translator import _
 from f2.log.logger import logger
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends, HTTPException, BackgroundTasks
 
+from app.db.postgres_db import RecordAction, RecordActionSchema
 from app.entity.base_response import BaseResponse
 from app.entity.filter_model import PostDetailFilter
-import tempfile
-import os
-import json
+
 from app.storage import storage_factory
 from datetime import datetime
+from app.dependencies import get_db
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 cdn_url = os.environ['CDN_URL']
 
 
+@router.post("/query/finish/{record_id}", response_model=BaseResponse)
+async def query_finish(record_id: str = Path(title="The ID of the record to get"),
+                       db: Session = Depends(get_db)):
+    one_data: type[RecordAction] = (db.query(RecordAction)
+                                    .filter(RecordAction.record_id == record_id, RecordAction.is_finish == True)
+                                    .first())
+    if one_data is None:
+        # raise HTTPException(status_code=404, detail="data not found")
+        return BaseResponse(code=201, message="success", data={}).json()
+    else:
+        return BaseResponse(code=200, message="success", data=RecordActionSchema.from_orm(one_data)).json()
+
+
 @router.post("/query/info", response_model=BaseResponse)
-async def receive_list(request: Request):
+async def query_info(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # Parse the incoming JSON data
     data = await request.json()
     data['proxies'] = {"http://": None, "https://": None}
@@ -47,23 +65,66 @@ async def receive_list(request: Request):
         video: PostDetailFilter = PostDetailFilter(response)
 
     video_dict: dict = video._to_dict()
-    print(f'response: {response}')
+    print(f'time:{datetime.now()} response: {response}')
     logger.info(_("单个作品数据：{0}").format(video_dict))
+
+    # 保存数据到数据库
+    new_msg = RecordAction(
+        record_id=str(uuid.uuid4()),
+        input_url_params='',
+        input_args=json.dumps(data),
+        type='dy',
+        mix_type=str(aweme_type),
+        output_body=json.dumps(video_dict),
+        visitor_id='anonymous',
+        creator='dy_python_service',
+        updater='dy_python_service',
+        is_delete=False,
+        is_finish=False
+    )
+    db.add(new_msg)
+    db.commit()
+    db.refresh(new_msg)
 
     save_path: Path = create_user_folder(data, video.sec_user_id)
     logger.info(_("保存路径：{0}").format(save_path))
+    print(f'start background task time:{datetime.now()}')
+    background_tasks.add_task(process_download, data, video_dict, save_path, new_msg.record_id, db)
+    print(f'end background task time:{datetime.now()}')
+    return BaseResponse(code=200, message="success", data=RecordActionSchema.from_orm(new_msg)).json()
 
-    await DouyinDownloader(data).create_download_tasks(
-        data, video_dict, save_path
-    )
 
-    if aweme_type == 68:
-        video_dict['upload_img_urls'] = upload_img_to_storage(str(save_path), video.sec_user_id)
+async def process_download(data: dict, video_dict: dict, save_path: Path, record_id: str, db: Session):
+    """
+    :param data: 传入的json数据，request body
+    :param video_dict: 解析的dy信息
+    :param save_path: 保存路径
+    :param record_id: 数据库的id
+    :param db: db-session
+    :return: none
+    """
+
+    # 使用 DouyinDownloader 异步创建下载任务
+    await DouyinDownloader(data).create_download_tasks(data, video_dict, save_path)
+
+    # 根据 aweme_type 处理图片和视频上传
+    if video_dict['aweme_type'] == 68:
+        video_dict['upload_img_urls'] = upload_img_to_storage(str(save_path), video_dict['sec_user_id'])
     else:
-        video_dict['upload_cover_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_cover.jpeg')
-        video_dict['upload_video_url'] = upload_file_to_storage(str(save_path), data, video.sec_user_id, '_video.mp4')
+        video_dict['upload_cover_url'] = upload_file_to_storage(str(save_path), data, video_dict['sec_user_id'],
+                                                                '_cover.jpeg')
+        video_dict['upload_video_url'] = upload_file_to_storage(str(save_path), data, video_dict['sec_user_id'],
+                                                                '_video.mp4')
 
-    return BaseResponse(code=200, message="success", data=video_dict).json()
+    # 更新数据库内容
+    existing_msg = (db.query(RecordAction)
+                    .filter(RecordAction.record_id == record_id)
+                    .first())
+    if existing_msg:
+        existing_msg.output_body = json.dumps(video_dict)
+        existing_msg.is_finish = True
+        db.commit()
+        db.refresh(existing_msg)
 
 
 def upload_file_to_storage(real_path_str: str, data: dict, nickname: str, file_suffix: str):
