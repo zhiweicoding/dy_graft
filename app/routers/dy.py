@@ -3,6 +3,7 @@ import uuid
 import tempfile
 import os
 import json
+import hashlib
 
 from f2.apps.douyin.crawler import DouyinCrawler
 from f2.apps.douyin.dl import DouyinDownloader
@@ -68,9 +69,11 @@ async def query_info(request: Request, background_tasks: BackgroundTasks, db: Se
     print(f'time:{datetime.now()} response: {response}')
     logger.info(_("单个作品数据：{0}").format(video_dict))
 
+    url_md5 = hashlib.md5(url.encode()).hexdigest()
+
     # 保存数据到数据库
     new_msg = RecordAction(
-        record_id=str(uuid.uuid4()),
+        record_id=str(url_md5),
         input_url_params='',
         input_args=json.dumps(data),
         type='DY',
